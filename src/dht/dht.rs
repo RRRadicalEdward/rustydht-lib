@@ -266,21 +266,23 @@ impl DHT {
 
 impl DHT {
     async fn accept_incoming_packets(&self) -> Result<(), RustyDHTError> {
+        // try to comment throttler out
         let mut throttler = Throttler::<32>::new(
             10,
             Duration::from_secs(6),
             Duration::from_secs(60),
             Duration::from_secs(86400),
         );
+
         let read_only = self.state.lock().unwrap().settings.read_only;
         loop {
             match async {
                 let (msg, addr) = self.socket.recv_from().await?;
 
                 // Drop the packet if the IP has been throttled.
-                if throttler.check_throttle(addr.ip(), None, None) {
+                /*if throttler.check_throttle(addr, None, None) {
                     return Ok(());
-                }
+                }*/
 
                 // Filter out packets sent from port 0. We can't reply to these.
                 if addr.port() == 0 {
@@ -842,9 +844,9 @@ impl DHT {
                         // Add the nodes we got back as "seen" (even though we haven't necessarily seen them directly yet).
                         // They will be pinged later in an attempt to verify them.
                         if let packets::ResponseSpecific::FindNodeResponse(args) = response_variant {
-                            let mut state = state.lock().unwrap();
                             for node in &args.nodes {
                                 if node.id.is_valid_for_ip(&node.address.ip()) {
+                                    let mut state = state.lock().unwrap();
                                     state.buckets.add_or_update(node.clone(), false);
                                 }
                             }

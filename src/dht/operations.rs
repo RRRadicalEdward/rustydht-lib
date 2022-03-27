@@ -1,15 +1,18 @@
-use crate::common::{Id, Node};
-use crate::dht::DHT;
-use crate::errors::RustyDHTError;
-use crate::packets;
-use crate::packets::MessageBuilder;
-use crate::storage::buckets::Buckets;
-use crate::storage::node_wrapper::NodeWrapper;
+use crate::{
+    common::{Id, Node},
+    dht::DHT,
+    errors::RustyDHTError,
+    packets,
+    packets::MessageBuilder,
+    storage::{buckets::Buckets, node_wrapper::NodeWrapper},
+};
 use futures::StreamExt;
 use log::{debug, error, info, trace, warn};
-use std::collections::HashSet;
-use std::net::SocketAddr;
-use std::time::{Duration, Instant};
+use std::{
+    collections::HashSet,
+    net::SocketAddr,
+    time::{Duration, Instant},
+};
 
 /// Announce that you are a peer for a specific info_hash, returning the nodes
 /// that were successfully announced to.
@@ -49,7 +52,7 @@ pub async fn announce_peer(
         let builder = announce_builder.clone();
         todos.push(async move {
             let announce_req = builder
-                .token(responder.token)
+                .token(responder.token.clone())
                 .build()
                 .expect("Failed to build announce_peer request");
             match dht
@@ -61,7 +64,7 @@ pub async fn announce_peer(
                 )
                 .await
             {
-                Ok(_) => Ok(responder.node),
+                Ok(_) => Ok(responder.node.clone()),
                 Err(e) => Err(e),
             }
         });
@@ -206,7 +209,13 @@ pub async fn get_peers(
     let dht_settings = dht.get_settings();
 
     // Hack to aid in bootstrapping
-    find_node(dht, info_hash, Duration::from_secs(5)).await?;
+    //find_node(dht, info_hash, timeout).await?;
+
+    // return stored peers if we know that they already have needed us info hash
+    /*
+    if let Some(peers) = dht.get_info_hashes(None).into_iter().find(|(known_info_hash, _)| known_info_hash == &info_hash).map(|(_, peers)| peers) {
+        return Ok(GetPeersResult::new(info_hash, peers.into_iter().map(|peer| peer.addr).collect(), Vec::new()));
+    } */
 
     let get_peers_result = tokio::time::timeout(timeout,
     async {
@@ -221,7 +230,7 @@ pub async fn get_peers(
 
             // Grab a few nodes closest to our target info_hash
             let nearest = buckets.get_nearest_nodes(&info_hash, None);
-            if nearest.len() <= 5 {
+            if nearest.is_empty() {
                 // If there are no/few nodes in the buckets yet, DHT may still be bootstrapping. Give it a moment and try again
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
@@ -237,6 +246,9 @@ pub async fn get_peers(
                 .target(info_hash)
                 .read_only(dht_settings.read_only)
                 .sender_id(dht.get_id());
+
+            info!("nearest count: {:?}", nearest.as_slice());
+
             let mut todos = futures::stream::FuturesUnordered::new();
             for node in nearest {
                 let node_clone = node.clone();
@@ -248,7 +260,7 @@ pub async fn get_peers(
                             .expect("Failed to build get_peers request"),
                         node_clone.node.address,
                         Some(node_clone.node.id),
-                        Some(Duration::from_secs(5))
+                        Some(timeout)
                     ).await {
                         Ok(reply) => Ok((node_clone.node, reply)),
                         Err(e) => Err(e)
@@ -278,12 +290,14 @@ pub async fn get_peers(
                                         buckets.add(NodeWrapper::new(node), None);
                                     }
                                 }
+                                //return;
                             }
                             packets::GetPeersResponseValues::Peers(p) => {
                                 info!(target: "rustydht_lib::operations::get_peers", "Got {} peers", p.len());
                                 for peer in p {
                                     unique_peers.insert(peer);
                                 }
+                                //return;
                             }
                         }},
                         _ => {
@@ -320,6 +334,7 @@ pub async fn get_peers(
 }
 
 /// Represents the results of a [get_peers](crate::dht::operations::get_peers) operation
+#[derive(Debug, Clone)]
 pub struct GetPeersResult {
     info_hash: Id,
     peers: Vec<SocketAddr>,
@@ -345,26 +360,27 @@ impl GetPeersResult {
     }
 
     /// The info_hash of the torrent that get_peers was attempting to get peers for
-    pub fn info_hash(self) -> Id {
-        self.info_hash
+    pub fn info_hash(&self) -> &Id {
+        &self.info_hash
     }
 
     /// Vector full of any peers that were found for the info_hash
-    pub fn peers(self) -> Vec<SocketAddr> {
-        self.peers
+    pub fn peers(&self) -> &[SocketAddr] {
+        &self.peers
     }
 
     /// Vector of information about the DHT nodes that responded to get_peers
     ///
     /// This is sorted by distance of the Node to the info_hash, from nearest to farthest.
-    pub fn responders(self) -> Vec<GetPeersResponder> {
-        self.responders
+    pub fn responders(&self) -> &[GetPeersResponder] {
+        &self.responders
     }
 }
 
 /// Represents the response of a node to a get_peers request, including its Id, IP address,
 /// and the token it replied with. This is helpful in case we want to follow up with
 /// an announce_peer request.
+#[derive(Clone, Debug)]
 pub struct GetPeersResponder {
     node: Node,
     token: Vec<u8>,
@@ -375,11 +391,11 @@ impl GetPeersResponder {
         GetPeersResponder { node, token }
     }
 
-    pub fn node(self) -> Node {
-        self.node
+    pub fn node(&self) -> &Node {
+        &self.node
     }
 
-    pub fn token(self) -> Vec<u8> {
-        self.token
+    pub fn token(&self) -> &[u8] {
+        &self.token
     }
 }

@@ -1,4 +1,4 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::time::{Duration, Instant};
 
 use log::debug;
@@ -7,7 +7,7 @@ type PacketCount = usize;
 
 #[derive(Clone, Copy)]
 struct ThrottlerRecord {
-    ip: IpAddr,
+    ip: SocketAddr,
     packets: PacketCount,
     expiration: Instant,
     creation_time: Instant,
@@ -17,7 +17,7 @@ impl Default for ThrottlerRecord {
     fn default() -> Self {
         let now = Instant::now();
         ThrottlerRecord {
-            ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
+            ip: SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0),
             packets: 0,
             expiration: now,
             creation_time: now,
@@ -28,7 +28,7 @@ impl Default for ThrottlerRecord {
 impl ThrottlerRecord {
     fn clear(&mut self) {
         let now = Instant::now();
-        self.ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+        self.ip = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);
         self.packets = 0;
         self.expiration = now;
         self.creation_time = now;
@@ -63,7 +63,7 @@ impl<const NUM_RECORDS: usize> Throttler<NUM_RECORDS> {
     /// Returns true if the provided IP is throttled.
     pub fn check_throttle(
         &mut self,
-        ip: IpAddr,
+        ip: SocketAddr,
         now: Option<Instant>,
         count: Option<PacketCount>,
     ) -> bool {
