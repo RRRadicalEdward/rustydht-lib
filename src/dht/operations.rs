@@ -209,7 +209,7 @@ pub async fn get_peers(
     let dht_settings = dht.get_settings();
 
     // Hack to aid in bootstrapping
-    //find_node(dht, info_hash, timeout).await?;
+    find_node(dht, info_hash, Duration::from_secs(5)).await?;
 
     // return stored peers if we know that they already have needed us info hash
     /*

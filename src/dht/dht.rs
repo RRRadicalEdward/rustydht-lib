@@ -280,9 +280,9 @@ impl DHT {
                 let (msg, addr) = self.socket.recv_from().await?;
 
                 // Drop the packet if the IP has been throttled.
-                /*if throttler.check_throttle(addr, None, None) {
+                if throttler.check_throttle(addr.ip(), None, None) {
                     return Ok(());
-                }*/
+                }
 
                 // Filter out packets sent from port 0. We can't reply to these.
                 if addr.port() == 0 {
