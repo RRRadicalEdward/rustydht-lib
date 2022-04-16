@@ -247,7 +247,7 @@ pub async fn get_peers(
                 .read_only(dht_settings.read_only)
                 .sender_id(dht.get_id());
 
-            info!("nearest count: {:?}", nearest.as_slice());
+            info!("nearest: {:?}", nearest.iter().map(|node_wrapped| node_wrapped.node().address).collect::<Vec<SocketAddr>>());
 
             let mut todos = futures::stream::FuturesUnordered::new();
             for node in nearest {
