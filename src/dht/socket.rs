@@ -4,7 +4,7 @@ use crate::packets;
 use crate::shutdown::ShutdownReceiver;
 use crate::storage::outbound_request_storage::{OutboundRequestStorage, RequestInfo};
 use anyhow::anyhow;
-use log::{error, trace, warn};
+use log::{error, info, trace, warn};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -55,7 +55,7 @@ impl DHTSocket {
     pub async fn recv_from(&self) -> Result<MessagePair, RustyDHTError> {
         match self.recv_from_rx.lock().await.recv().await {
             Some(message_pair) => {
-                //error!("Received: {:?} from {}", message_pair.0, message_pair.1);
+                info!("Received: {:?} from {}", message_pair.0, message_pair.1);
                 Ok(message_pair)
             },
             None => Err(RustyDHTError::GeneralError(anyhow!(
@@ -71,7 +71,7 @@ impl DHTSocket {
         dest_id: Option<Id>,
     ) -> Result<Option<mpsc::Receiver<packets::Message>>, RustyDHTError> {
         let mut to_ret = None;
-        //info!("Sending {to_send:?} to {dest}");
+        info!("Sending {to_send:?} to {dest}");
         // optimization to only store notification stuff on requests (not on replies too)
         if let packets::MessageType::Request(_) = to_send.message_type {
             let (notify_tx, notify_rx) = mpsc::channel(1);
@@ -219,7 +219,7 @@ impl DHTSocket {
             _ => {
                 // Request and Error messages always get sent to the general recv channel
                 recv_from_tx
-                    .send((message, sender))
+                    .send((message.clone(), sender))
                     .await
                     .map_err(|e| RustyDHTError::GeneralError(e.into()))?;
                 warn!(target: "rusydht_lib::DHTSocket", "Received spurious response {:?} from {}", message, sender);
