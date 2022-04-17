@@ -794,7 +794,7 @@ impl DHT {
                 }
             },
             format!("ping to {}", target),
-            Some(Duration::from_secs(5)),
+            Some(Duration::from_secs(15)),
         );
         Ok(())
     }
