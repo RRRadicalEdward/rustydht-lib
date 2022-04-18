@@ -36,7 +36,7 @@ impl NodeWrapper {
 
     pub fn node(&self) -> Node {
         self.node.clone()
-   }
+    }
 }
 
 impl Bucketable for NodeWrapper {

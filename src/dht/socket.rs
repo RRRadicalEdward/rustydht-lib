@@ -5,6 +5,7 @@ use crate::shutdown::ShutdownReceiver;
 use crate::storage::outbound_request_storage::{OutboundRequestStorage, RequestInfo};
 use anyhow::anyhow;
 use log::{error, info, trace, warn};
+use std::io;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -19,6 +20,7 @@ pub struct DHTSocket {
     recv_from_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<MessagePair>>>,
     send_to_tx: mpsc::Sender<MessagePair>,
     request_storage: Arc<Mutex<OutboundRequestStorage>>,
+    socket: Arc<UdpSocket>,
 }
 
 impl DHTSocket {
@@ -35,7 +37,11 @@ impl DHTSocket {
         );
         ShutdownReceiver::spawn_with_shutdown(
             shutdown.clone(),
-            DHTSocket::background_io_incoming(socket, recv_from_tx, request_storage.clone()),
+            DHTSocket::background_io_incoming(
+                socket.clone(),
+                recv_from_tx,
+                request_storage.clone(),
+            ),
             "DHTSocket background incoming I/O task",
             None,
         );
@@ -49,7 +55,12 @@ impl DHTSocket {
             recv_from_rx: Arc::new(tokio::sync::Mutex::new(recv_from_rx)),
             send_to_tx,
             request_storage,
+            socket,
         }
+    }
+
+    pub fn local_addr(&self) -> io::Result<SocketAddr> {
+        self.socket.local_addr()
     }
 
     pub async fn recv_from(&self) -> Result<MessagePair, RustyDHTError> {
@@ -57,7 +68,7 @@ impl DHTSocket {
             Some(message_pair) => {
                 info!("Received: {:?} from {}", message_pair.0, message_pair.1);
                 Ok(message_pair)
-            },
+            }
             None => Err(RustyDHTError::GeneralError(anyhow!(
                 "Can't recv_from as background I/O task channel has closed"
             ))),

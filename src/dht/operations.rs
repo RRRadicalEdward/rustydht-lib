@@ -1,3 +1,5 @@
+use crate::dht::calculate_token;
+use crate::storage::buckets::Bucketable;
 use crate::{
     common::{Id, Node},
     dht::DHT,
@@ -34,11 +36,13 @@ pub async fn announce_peer(
 ) -> Result<Vec<Node>, RustyDHTError> {
     let mut to_ret = Vec::new();
 
+    dht.set_self_infohash(info_hash, port.unwrap_or(0));
+    let nodes = dht.get_nodes();
     // Figure out which nodes we want to announce to
-    let get_peers_result = get_peers(dht, info_hash, timeout).await?;
-
-    trace!(target:"rustydht_lib::operations::announce_peer", "{} nodes responded to get_peers", get_peers_result.responders.len());
-
+    //let get_peers_result = get_peers(dht, info_hash, timeout).await?;
+    // TODO announce to node that we know
+    //trace!(target:"rustydht_lib::operations::announce_peer", "{} nodes responded to get_peers", get_peers_result.responders.len());
+    debug!("going to announce peer to {} nodes", nodes.len());
     let announce_builder = MessageBuilder::new_announce_peer_request()
         .sender_id(dht.get_id())
         .read_only(dht.get_settings().read_only)
@@ -48,6 +52,7 @@ pub async fn announce_peer(
 
     // Prepare to send packets to the nearest 8
     let mut todos = futures::stream::FuturesUnordered::new();
+    /*
     for responder in get_peers_result.responders().into_iter().take(8) {
         let builder = announce_builder.clone();
         todos.push(async move {
@@ -65,6 +70,29 @@ pub async fn announce_peer(
                 .await
             {
                 Ok(_) => Ok(responder.node.clone()),
+                Err(e) => Err(e),
+            }
+        });
+    } */
+    // announce to everybody we know that we are sharing an info_hash
+    for node_wrapper in nodes {
+        let builder = announce_builder.clone();
+        todos.push(async move {
+            let node = node_wrapper.node();
+            let announce_req = builder
+                .token(calculate_token(&node.address, dht.get_token_secrets()).to_vec())
+                .build()
+                .expect("Failed to build announce_peer request");
+            match dht
+                .send_request(
+                    announce_req,
+                    node.address,
+                    Some(node_wrapper.get_id()),
+                    Some(Duration::from_secs(5)),
+                )
+                .await
+            {
+                Ok(_) => Ok(node.clone()),
                 Err(e) => Err(e),
             }
         });

@@ -487,6 +487,8 @@ impl DHT {
                             self.socket
                                 .send_to(reply, addr, Some(arguments.requester_id))
                                 .await?;
+                        } else {
+                            error!("token from {addr} is not valid");
                         }
                     }
 
@@ -551,6 +553,12 @@ impl DHT {
         }
 
         Ok(())
+    }
+
+    pub fn set_self_infohash(&self, info_hash: Id, port: u16) {
+        let state = &mut *self.state.lock().unwrap();
+        let our_peer_addr = SocketAddr::new(self.socket.local_addr().unwrap().ip(), port);
+        state.peer_storage.announce_peer(info_hash, our_peer_addr);
     }
 
     async fn send_packet_to_subscribers(&self, msg: packets::Message, _addr: SocketAddr) {
@@ -927,6 +935,11 @@ impl DHT {
         );
     }
 
+    pub fn get_token_secrets(&self) -> Vec<u8> {
+        let state = self.state.lock().unwrap();
+        state.token_secret.clone()
+    }
+
     async fn find_node_internal(
         &self,
         shutdown: shutdown::ShutdownReceiver,
@@ -984,7 +997,7 @@ impl DHT {
 /// Calculates a peer announce token based on a sockaddr and some secret.
 /// Pretty positive this isn't cryptographically safe but I'm not too worried.
 /// If we care about that later we can use a proper HMAC or something.
-fn calculate_token<T: AsRef<[u8]>>(remote: &SocketAddr, secret: T) -> [u8; 4] {
+pub fn calculate_token<T: AsRef<[u8]>>(remote: &SocketAddr, secret: T) -> [u8; 4] {
     let secret = secret.as_ref();
     let mut digest = crc32::Digest::new(crc32::CASTAGNOLI);
     // digest.write(&crate::packets::sockaddr_to_bytes(remote));
